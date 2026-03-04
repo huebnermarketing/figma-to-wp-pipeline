@@ -5,11 +5,9 @@
  * Saves: output/blueprints/{pageName}.html
  */
 
-const Anthropic = require("@anthropic-ai/sdk");
-const path      = require("path");
-const fs        = require("fs");
-
-const client = new Anthropic();
+const claudeCall = require("../utils/claude_call");
+const path       = require("path");
+const fs         = require("fs");
 
 /**
  * @param {Array}  frames    - Figma frames from Stage 1
@@ -69,11 +67,11 @@ Generate complete, semantic HTML for this page. Requirements:
 
 Return ONLY the HTML, no explanation.`;
 
-  const response = await client.messages.create({
-    model: process.env.CLAUDE_MODEL || "claude-opus-4-6",
+  const response = await claudeCall({
+    model:      process.env.CLAUDE_MODEL || "claude-opus-4-6",
     max_tokens: 4096,
-    messages: [{ role: "user", content: prompt }],
-  });
+    messages:   [{ role: "user", content: prompt }],
+  }, `gen_html:${frame.name}`);
 
   return response.content[0].text.trim();
 }

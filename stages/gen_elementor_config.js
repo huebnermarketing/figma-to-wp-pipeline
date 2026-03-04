@@ -5,11 +5,9 @@
  * Saves: output/elementor-config.json
  */
 
-const Anthropic = require("@anthropic-ai/sdk");
-const path      = require("path");
-const fs        = require("fs");
-
-const client = new Anthropic();
+const claudeCall = require("../utils/claude_call");
+const path       = require("path");
+const fs         = require("fs");
 
 /**
  * @param {object} tokens    - Design tokens from Stage 2
@@ -70,11 +68,11 @@ Return a JSON object with this exact structure (this will be written to the Word
 
 Use the font families and sizes from the design tokens. Return ONLY valid JSON.`;
 
-  const response = await client.messages.create({
-    model: process.env.CLAUDE_MODEL || "claude-opus-4-6",
+  const response = await claudeCall({
+    model:      process.env.CLAUDE_MODEL || "claude-opus-4-6",
     max_tokens: 2048,
-    messages: [{ role: "user", content: prompt }],
-  });
+    messages:   [{ role: "user", content: prompt }],
+  }, "gen_elementor_config");
 
   const rawText = response.content[0].text.trim();
   let config;

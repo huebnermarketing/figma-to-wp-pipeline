@@ -5,12 +5,10 @@
  * Saves: output/templates/{pageName}.json
  */
 
-const Anthropic = require("@anthropic-ai/sdk");
-const path      = require("path");
-const fs        = require("fs");
-const crypto    = require("crypto");
-
-const client = new Anthropic();
+const claudeCall = require("../utils/claude_call");
+const path       = require("path");
+const fs         = require("fs");
+const crypto     = require("crypto");
 
 /**
  * @param {object} blueprints - { [name]: htmlString } from Stage 4
@@ -94,11 +92,11 @@ Rules (CRITICAL — follow exactly):
 
 Output the JSON array now:`;
 
-  const response = await client.messages.create({
-    model: process.env.CLAUDE_MODEL || "claude-opus-4-6",
+  const response = await claudeCall({
+    model:      process.env.CLAUDE_MODEL || "claude-opus-4-6",
     max_tokens: maxTokens,
-    messages: [{ role: "user", content: prompt }],
-  });
+    messages:   [{ role: "user", content: prompt }],
+  }, `gen_template:${name}`);
 
   const rawText  = response.content[0].text.trim();
   const stopReason = response.stop_reason;

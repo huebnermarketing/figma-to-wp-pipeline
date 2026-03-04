@@ -7,11 +7,9 @@
  */
 
 const { chromium } = require("playwright");
-const Anthropic    = require("@anthropic-ai/sdk");
+const claudeCall   = require("../utils/claude_call");
 const path         = require("path");
 const fs           = require("fs");
-
-const client = new Anthropic();
 
 const VIEWPORTS = [
   { label: "desktop", width: 1440, height: 900 },
@@ -120,7 +118,7 @@ Respond with JSON only:
 }`;
 
   try {
-    const response = await client.messages.create({
+    const response = await claudeCall({
       model: process.env.CLAUDE_MODEL || "claude-opus-4-6",
       max_tokens: 512,
       messages: [{
