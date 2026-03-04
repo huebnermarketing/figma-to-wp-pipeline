@@ -2,7 +2,8 @@
 /**
  * Stage 1 — fetch_figma.js
  * Fetches the full Figma file via REST API.
- * Saves: output/figma-raw.json
+ * Also exports all image assets from the design.
+ * Saves: output/figma-raw.json, output/figma-images.json
  */
 
 const axios = require("axios");
@@ -49,6 +50,29 @@ async function fetchFigma(figmaUrl, outputDir) {
     throw new Error("No top-level frames found in the Figma file. Make sure your Figma file has at least one Frame (not just groups).");
   }
 
+  // ── Export image assets from Figma ──────────────────────────────────────────
+  const imageNodeIds = collectImageNodeIds(document);
+  let imageMap = {};
+
+  if (imageNodeIds.length > 0) {
+    process.stdout.write(`      Exporting ${imageNodeIds.length} image asset(s) from Figma...`);
+    imageMap = await exportFigmaImages(fileId, imageNodeIds);
+    console.log(` ✓  (${Object.keys(imageMap).length} URLs resolved)`);
+  }
+
+  // Also export each top-level frame as a full PNG for QA reference
+  const frameIds = frames.map(f => f.id);
+  let framePreviews = {};
+  if (frameIds.length > 0) {
+    process.stdout.write(`      Exporting ${frameIds.length} frame preview(s)...`);
+    framePreviews = await exportFigmaImages(fileId, frameIds, { scale: 1 });
+    console.log(` ✓`);
+  }
+
+  // Save image map for Stage 4
+  const imagesPath = path.join(outputDir, "figma-images.json");
+  fs.writeFileSync(imagesPath, JSON.stringify({ imageMap, framePreviews }, null, 2));
+
   // Save raw data for debugging / subsequent stages
   const rawPath = path.join(outputDir, "figma-raw.json");
   fs.writeFileSync(rawPath, JSON.stringify({
@@ -64,9 +88,64 @@ async function fetchFigma(figmaUrl, outputDir) {
     fileId,
     fileName,
     frames,
-    styles: styles || {},
+    styles:        styles || {},
     document,
+    imageMap,
+    framePreviews,
   };
+}
+
+/**
+ * Walk the full document tree and collect IDs of every node that
+ * has an IMAGE fill — these are the photos, illustrations, and
+ * background images that need to be fetched from Figma's image API.
+ */
+function collectImageNodeIds(document) {
+  const ids = new Set();
+
+  function walk(node) {
+    if (!node) return;
+    if (Array.isArray(node.fills)) {
+      if (node.fills.some(f => f.type === "IMAGE" && f.visible !== false)) {
+        ids.add(node.id);
+      }
+    }
+    (node.children || []).forEach(walk);
+  }
+
+  walk(document);
+  return Array.from(ids);
+}
+
+/**
+ * Call the Figma Images API to get CDN URLs for a list of node IDs.
+ * Batches into chunks of 100 (Figma API limit).
+ * Returns { nodeId: "https://..." } map.
+ */
+async function exportFigmaImages(fileId, nodeIds, options = {}) {
+  const format = options.format || "png";
+  const scale  = options.scale  || 2;
+  const imageMap = {};
+
+  // Chunk into batches of 100
+  for (let i = 0; i < nodeIds.length; i += 100) {
+    const batch = nodeIds.slice(i, i + 100);
+    try {
+      const res = await axios.get(`https://api.figma.com/v1/images/${fileId}`, {
+        headers: { "X-Figma-Token": process.env.FIGMA_TOKEN },
+        params:  { ids: batch.join(","), format, scale },
+        timeout: 60000,
+      });
+      if (res.data?.images) {
+        Object.assign(imageMap, res.data.images);
+      }
+    } catch (err) {
+      // Non-fatal — pipeline continues, images fall back to placeholders
+      console.warn(`\n      ⚠  Image export batch failed: ${err.message}`);
+    }
+  }
+
+  return imageMap;
 }
 
 /**

@@ -67,6 +67,7 @@ add_action( 'rest_api_init', function () {
             'title'          => [ 'required' => true,  'type' => 'string' ],
             'slug'           => [ 'required' => true,  'type' => 'string' ],
             'elementor_data' => [ 'required' => true,  'type' => 'string' ],
+            'template'       => [ 'required' => false, 'type' => 'string', 'default' => 'elementor_canvas' ],
         ],
     ] );
 } );
@@ -120,6 +121,7 @@ function fp_deploy_page( WP_REST_Request $request ) {
     $title          = sanitize_text_field( $request->get_param( 'title' ) );
     $slug           = sanitize_title( $request->get_param( 'slug' ) );
     $elementor_data = $request->get_param( 'elementor_data' );
+    $template       = sanitize_text_field( $request->get_param( 'template' ) ?: 'elementor_canvas' );
 
     // Validate Elementor data is valid JSON
     json_decode( $elementor_data );
@@ -141,6 +143,7 @@ function fp_deploy_page( WP_REST_Request $request ) {
         'post_status'  => 'publish',
         'post_type'    => 'page',
         'post_content' => '',
+        'page_template' => $template, // e.g. "elementor_canvas" hides theme header/footer
     ];
 
     if ( ! empty( $existing ) ) {

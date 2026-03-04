@@ -120,8 +120,11 @@ async function deployPage(wpUrl, auth, name, templateData) {
   const pagePayload = {
     title,
     slug,
-    status:  "publish",
-    content: "<!-- Elementor rendered content -->",
+    status:   "publish",
+    // "elementor_canvas" removes the active theme's header, footer and sidebar
+    // so only the Elementor-built content is rendered — matching the Figma design.
+    template: "elementor_canvas",
+    content:  "<!-- Elementor rendered content -->",
     meta: {
       _elementor_edit_mode:    "builder",
       _elementor_template_type: "wp-page",
@@ -181,7 +184,7 @@ async function deployPageViaBridge(wpUrl, auth, { title, slug, elementorData }) 
   try {
     const res = await axios.post(
       `${wpUrl}/wp-json/figma-pipeline/v1/deploy-page`,
-      { title, slug, elementor_data: elementorData },
+      { title, slug, elementor_data: elementorData, template: "elementor_canvas" },
       { auth, timeout: 30000 }
     );
     return res.data;

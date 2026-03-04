@@ -13,9 +13,10 @@ const fs         = require("fs");
  * @param {Array}  frames    - Figma frames from Stage 1
  * @param {object} tokens    - Design tokens from Stage 2
  * @param {string} outputDir
+ * @param {object} imageMap  - { nodeId: "https://..." } from Stage 1 image export
  * @returns {object} blueprints - { [frameName]: htmlString }
  */
-async function genHtmlBlueprints(frames, tokens, outputDir) {
+async function genHtmlBlueprints(frames, tokens, outputDir, imageMap = {}) {
   const blueprints = {};
   const bpDir = path.join(outputDir, "blueprints");
 
@@ -26,7 +27,7 @@ async function genHtmlBlueprints(frames, tokens, outputDir) {
     if (i > 0) await rateLimit();
     process.stdout.write(`      Generating HTML for: ${frame.name}...`);
 
-    const html = await generateHtmlForFrame(frame, tokens);
+    const html = await generateHtmlForFrame(frame, tokens, imageMap);
     blueprints[name] = html;
 
     const outPath = path.join(bpDir, `${name}.html`);
@@ -37,11 +38,20 @@ async function genHtmlBlueprints(frames, tokens, outputDir) {
   return blueprints;
 }
 
-async function generateHtmlForFrame(frame, tokens) {
+async function generateHtmlForFrame(frame, tokens, imageMap = {}) {
   // Build a compact frame description for Claude
   const frameDesc = describeFrame(frame);
 
-  const prompt = `You are a frontend developer converting a Figma frame into semantic HTML.
+  // Collect real image URLs for nodes inside this frame
+  const frameImages = collectFrameImages(frame, imageMap);
+  const hasRealImages = Object.keys(frameImages).length > 0;
+
+  const imageInstructions = hasRealImages
+    ? `REAL IMAGE ASSETS (use these exact URLs in <img> src attributes — do NOT use placeholders):
+${Object.entries(frameImages).map(([name, url]) => `  - "${name}": ${url}`).join("\n")}`
+    : `No image assets were exported. Use descriptive placeholder text in alt attributes and <img src="https://placehold.co/800x500/eeeeee/999999?text=Image" alt="description">.`;
+
+  const prompt = `You are an expert frontend developer converting a Figma frame into a pixel-faithful semantic HTML page.
 
 Frame: "${frame.name}"
 Dimensions: ${frame.absoluteBoundingBox?.width || 1440}px × ${frame.absoluteBoundingBox?.height || 900}px
@@ -51,21 +61,29 @@ ${JSON.stringify(frameDesc, null, 2)}
 
 Design tokens:
 - Primary color: ${tokens.colors?.primary || "#000"}
+- Accent color: ${tokens.colors?.accent || tokens.colors?.secondary || "#f37022"}
 - Background: ${tokens.colors?.background || "#fff"}
+- Text color: ${tokens.colors?.text || "#333"}
 - Heading font: ${tokens.typography?.headingFont || "sans-serif"}
 - Body font: ${tokens.typography?.bodyFont || "sans-serif"}
 - Container max-width: ${tokens.containerMaxWidth || 1200}px
 
-Generate complete, semantic HTML for this page. Requirements:
+${imageInstructions}
+
+Generate a complete, faithful HTML document for this page. Requirements:
 1. Use semantic HTML5 tags: <header>, <nav>, <main>, <section>, <footer>
 2. Use BEM class names (e.g. .hero__title, .card__body)
-3. Infer sections from the Figma structure (hero, features, testimonials, CTA, etc.)
-4. Include placeholder text that describes the content (e.g. "Main headline goes here")
-5. Use <img src="placeholder.jpg" alt="description"> for images
-6. Include an inline <style> block with basic CSS using the design tokens
-7. Make it a complete HTML document with <!DOCTYPE html>
+3. Match the Figma layout as closely as possible — infer section names, order, and visual hierarchy from the frame structure
+4. For images: use the REAL image URLs provided above (matched by node name). Only fall back to placeholders if no real URL exists for that element
+5. Include an inline <style> block with CSS that:
+   - Uses the design tokens for colors and fonts
+   - Implements flexbox/grid layouts matching the Figma structure
+   - Includes hover states for interactive elements
+   - Is fully responsive (mobile breakpoint at 768px)
+6. Make it a complete HTML document with <!DOCTYPE html>
+7. Do NOT include any JavaScript
 
-Return ONLY the HTML, no explanation.`;
+Return ONLY the HTML, no explanation, no markdown fences.`;
 
   const response = await claudeCall({
     model:      process.env.CLAUDE_MODEL || "claude-opus-4-6",
@@ -74,6 +92,25 @@ Return ONLY the HTML, no explanation.`;
   }, `gen_html:${frame.name}`);
 
   return response.content[0].text.trim();
+}
+
+/**
+ * Walk a frame's node tree and build a map of { nodeName: imageUrl }
+ * for every node that has a real image URL from the Figma export.
+ */
+function collectFrameImages(frame, imageMap) {
+  const refs = {};
+  function walk(node) {
+    if (!node) return;
+    if (imageMap[node.id]) {
+      // Use node name as key, falling back to node ID
+      const key = node.name || node.id;
+      refs[key] = imageMap[node.id];
+    }
+    (node.children || []).forEach(walk);
+  }
+  walk(frame);
+  return refs;
 }
 
 /**

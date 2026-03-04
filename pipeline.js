@@ -85,13 +85,19 @@ function loadFromDisk(outputDir) {
   const figmaRaw = fs.existsSync(path.join(outputDir, "figma-raw.json"))
     ? read("figma-raw.json") : null;
 
+  // Load image map exported by Stage 1
+  const figmaImages = fs.existsSync(path.join(outputDir, "figma-images.json"))
+    ? read("figma-images.json") : { imageMap: {}, framePreviews: {} };
+
   // Reconstruct figmaData shape from saved raw file
   const figmaData = figmaRaw ? {
-    fileId:   figmaRaw.fileId,
-    fileName: figmaRaw.fileName,
-    frames:   figmaRaw.frames || [],
-    styles:   figmaRaw.styles || {},
-    document: figmaRaw.document || {},
+    fileId:        figmaRaw.fileId,
+    fileName:      figmaRaw.fileName,
+    frames:        figmaRaw.frames || [],
+    styles:        figmaRaw.styles || {},
+    document:      figmaRaw.document || {},
+    imageMap:      figmaImages.imageMap      || {},
+    framePreviews: figmaImages.framePreviews || {},
   } : null;
 
   const deployReport = fs.existsSync(path.join(outputDir, "deployment-report.json"))
@@ -244,7 +250,7 @@ async function main() {
   if (shouldRun(4, fromStage, onlyStage)) {
     console.log("\n[4/7] Generating HTML blueprints with Claude...");
     const t = Date.now();
-    blueprints = await genHtmlBlueprints(figmaData.frames, tokens, outputDir);
+    blueprints = await genHtmlBlueprints(figmaData.frames, tokens, outputDir, figmaData.imageMap || {});
     log("4/7 ✓", `Generated ${Object.keys(blueprints).length} blueprint(s) in ${elapsed(t)}`);
     Object.keys(blueprints).forEach(n => console.log(`      · ${n}.html`));
   } else {
