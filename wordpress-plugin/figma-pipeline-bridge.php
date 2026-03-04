@@ -5,7 +5,9 @@
  *               Registers Elementor meta fields for REST API access and provides
  *               endpoints for global settings and CSS cache flushing.
  * Version:      1.0.0
- * Author:       Claude AI Pipeline
+ * Author:       Tarang
+ * Author URI:   https://whitelabeliq.com
+ * Developer:    WLIQ
  * Requires at least: 5.8
  * Requires PHP: 7.4
  */

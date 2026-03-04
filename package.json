@@ -1,7 +1,8 @@
 {
   "name": "figma-to-wp-pipeline",
   "version": "1.0.0",
-  "description": "Automated Figma → WordPress Elementor pipeline powered by Claude AI",
+  "description": "Automated Figma → WordPress Elementor pipeline",
+  "author": "Tarang",
   "main": "pipeline.js",
   "scripts": {
     "start": "node pipeline.js",
