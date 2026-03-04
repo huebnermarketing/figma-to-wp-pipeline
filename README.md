@@ -16,8 +16,7 @@ You paste a Figma file URL. Claude AI reads the design, extracts tokens, generat
 | 4 | Claude AI writes semantic HTML for each Figma page frame | ~8s per page |
 | 5 | Claude AI converts each HTML blueprint → Elementor page template JSON | ~15s per page |
 | 6 | Deploys all templates to WordPress via REST API + activates pages | ~15s |
-| 7 | Playwright takes screenshots at desktop / tablet / mobile | ~20s |
-| 7 | Claude Vision compares screenshots vs Figma design and scores fidelity | ~5s per screenshot |
+| 7 | Playwright takes screenshots at desktop / tablet / mobile + Claude Vision QA | ~25s |
 
 **Total for a 3-page site: ~60–90 minutes of manual work → ~3–5 minutes automated.**
 
@@ -25,7 +24,7 @@ You paste a Figma file URL. Claude AI reads the design, extracts tokens, generat
 
 ## Prerequisites
 
-### On Your Machine (Developer)
+### On Your Machine
 
 | Tool | Install | Check |
 |------|---------|-------|
@@ -39,7 +38,7 @@ You paste a Figma file URL. Claude AI reads the design, extracts tokens, generat
 | WordPress 5.8+ | REST API meta support |
 | Elementor plugin (free) | Page builder rendering |
 | Application Passwords enabled | REST API authentication |
-| Permalinks enabled | REST API routing |
+| Permalinks enabled (any structure) | REST API routing |
 
 ### Accounts / API Keys
 
@@ -47,7 +46,7 @@ You paste a Figma file URL. Claude AI reads the design, extracts tokens, generat
 |---------|-------------|
 | **Figma Personal Access Token** | figma.com → Account Settings → Personal Access Tokens |
 | **Anthropic API Key** | [console.anthropic.com](https://console.anthropic.com) → API Keys |
-| **WordPress Application Password** | WP Admin → Users → Profile → Application Passwords section |
+| **WordPress Application Password** | WP Admin → Users → Profile → Application Passwords |
 
 ---
 
@@ -62,7 +61,7 @@ npm install
 npx playwright install chromium
 ```
 
-> `npx playwright install chromium` downloads a headless browser (~150MB) for the QA screenshots stage. Only needed once.
+> `npx playwright install chromium` downloads a headless browser (~150MB) for QA screenshots. Only needed once.
 
 ---
 
@@ -72,7 +71,7 @@ npx playwright install chromium
 cp .env.example .env
 ```
 
-Open `.env` in any text editor and fill in your values:
+Open `.env` and fill in your values:
 
 ```env
 FIGMA_TOKEN=figd_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -85,48 +84,38 @@ WP_APP_PASSWORD=xxxx xxxx xxxx xxxx xxxx xxxx
 **How to get each value:**
 
 **FIGMA_TOKEN**
-1. Go to figma.com and sign in
-2. Click your avatar (top-left) → Settings → Security tab
-3. Under "Personal access tokens" → click "Generate new token"
-4. Give it a name, copy the token, paste it in `.env`
+1. Go to figma.com → click your avatar → Settings → Security tab
+2. Under "Personal access tokens" → Generate new token → copy it
 
 **ANTHROPIC_API_KEY**
-1. Go to [console.anthropic.com](https://console.anthropic.com)
-2. Click "API Keys" in the left sidebar
-3. Click "Create Key", copy it, paste it in `.env`
+1. Go to [console.anthropic.com](https://console.anthropic.com) → API Keys → Create Key → copy it
+2. Make sure you have billing set up (add a card or credits)
 
-**WP_URL**
-- Just your WordPress site URL, no trailing slash: `https://yoursite.com`
-- Must be a live, publicly accessible site (not localhost unless you use ngrok)
+**WP_URL** — your WordPress site URL, no trailing slash: `https://yoursite.com`
 
-**WP_USER**
-- Your WordPress admin username (the one you log in with)
+**WP_USER** — your WordPress admin username
 
 **WP_APP_PASSWORD**
-1. Log in to WordPress Admin
-2. Go to Users → Profile (or Users → All Users → click your user → Edit)
-3. Scroll to the bottom: "Application Passwords" section
-4. Enter a name like "Figma Pipeline" → click "Add New Application Password"
-5. Copy the generated password (format: `xxxx xxxx xxxx xxxx`)
-6. Paste it in `.env` — spaces are fine, they're stripped automatically
+1. WP Admin → Users → Profile → scroll to "Application Passwords"
+2. Enter name "Figma Pipeline" → Add New → copy the generated password
+3. Paste as-is (spaces are fine — stripped automatically)
 
 ---
 
 ### Step 3: Install the WordPress Companion Plugin
 
-The companion plugin allows the pipeline to write Elementor data to WordPress pages and apply global settings.
+Needed to write Elementor data to pages and apply global settings.
 
-**Method A: Direct upload (easiest)**
-1. Go to `wordpress-plugin/` folder in this project
-2. Copy `figma-pipeline-bridge.php` to your server's `wp-content/plugins/figma-pipeline-bridge/` directory
-3. Go to WP Admin → Plugins → find "Figma Pipeline Bridge" → click Activate
+**Method A — Direct upload:**
+1. Copy `wordpress-plugin/figma-pipeline-bridge.php` to your server at:
+   `wp-content/plugins/figma-pipeline-bridge/figma-pipeline-bridge.php`
+2. WP Admin → Plugins → find "Figma Pipeline Bridge" → Activate
 
-**Method B: Via WordPress Admin**
+**Method B — Via WordPress Admin:**
 1. Zip the `wordpress-plugin/` folder
-2. WP Admin → Plugins → Add New → Upload Plugin → choose the zip
-3. Install → Activate
+2. WP Admin → Plugins → Add New → Upload Plugin → Install → Activate
 
-> **Note:** The pipeline will still work without this plugin — pages will be created but may not have Elementor data applied. Install the plugin for full functionality.
+> Without this plugin pages will be created but Elementor data won't be applied.
 
 ---
 
@@ -136,81 +125,194 @@ The companion plugin allows the pipeline to write Elementor data to WordPress pa
 node pipeline.js --figma-url="https://www.figma.com/file/YOUR_FILE_ID/Your-File-Name"
 ```
 
-That's it. Watch the terminal as the pipeline runs through all 7 stages.
+Watch the terminal — it logs every stage in real time.
 
 ### Finding Your Figma URL
 
-1. Open your Figma file in the browser
-2. Copy the URL from the address bar
-3. It should look like: `https://www.figma.com/file/AbC123XyZ/My-Website-Design`
+Open your Figma file in the browser and copy the full URL:
+`https://www.figma.com/file/AbC123XyZ/My-Website-Design`
 
-### Example Output
+> Both `/file/` and `/design/` URLs are supported.
 
+---
+
+## Resume & Recovery Commands
+
+**The pipeline saves every stage's output to disk. If it breaks at any stage, nothing is lost — just fix the issue and resume.**
+
+### Resume automatically (recommended)
+
+Re-run the same command — the pipeline detects which stages are already done and skips them:
+
+```bash
+node pipeline.js --from-stage=5
 ```
-────────────────────────────────────────────────────────────
-  🚀  Figma → WordPress Elementor Pipeline
-────────────────────────────────────────────────────────────
-  Figma URL : https://figma.com/file/AbC123/My-Website
-  WP Site   : https://yoursite.com
-  Output    : ./output
-  Model     : claude-opus-4-6
 
-[1/7] Fetching Figma file...
-[09:12:01] 1/7 ✓  Fetched in 1.4s  — 3 frames found
-      · Home (12345)
-      · About (12346)
-      · Services (12347)
+### Resume from a specific stage
 
-[2/7] Extracting design tokens with Claude...
-[09:12:12] 2/7 ✓  Extracted in 9.2s
-      · Colors: 10
-      · Type scales: 6
-      · Spacing values: 10
+```bash
+node pipeline.js --from-stage=1   # restart everything
+node pipeline.js --from-stage=2   # re-run token extraction onwards
+node pipeline.js --from-stage=3   # re-run Elementor config onwards
+node pipeline.js --from-stage=4   # re-run HTML blueprints onwards
+node pipeline.js --from-stage=5   # re-run template generation onwards
+node pipeline.js --from-stage=6   # re-deploy to WordPress only
+node pipeline.js --from-stage=7   # re-run QA only
+```
 
-[3/7] Generating Elementor global config with Claude...
-[09:12:19] 3/7 ✓  Generated in 6.8s  — elementor-config.json written
+> Stages 1–4 don't need `--figma-url` when resuming — they load from saved output files.
 
-[4/7] Generating HTML blueprints with Claude...
-      Generating HTML for: Home... ✓
-      Generating HTML for: About... ✓
-      Generating HTML for: Services... ✓
-[09:12:52] 4/7 ✓  Generated 3 blueprint(s) in 32.5s
+### Run a single stage only
 
-[5/7] Converting blueprints to Elementor templates with Claude...
-      Generating Elementor template: home... ✓
-      Generating Elementor template: about... ✓
-      Generating Elementor template: services... ✓
-[09:13:38] 5/7 ✓  Generated 3 template(s) in 46.2s
+```bash
+node pipeline.js --only-stage=5   # regenerate templates only
+node pipeline.js --only-stage=6   # redeploy to WordPress only
+node pipeline.js --only-stage=7   # rerun QA only
+```
 
-[6/7] Deploying to WordPress...
-      · Connected as: Admin (administrator)
-      · Elementor global settings applied ✓
-      · Published: "Home"  →  https://yoursite.com/home/
-      · Published: "About"  →  https://yoursite.com/about/
-      · Published: "Services"  →  https://yoursite.com/services/
-[09:13:55] 6/7 ✓  Deployed 3 page(s) in 17.1s
+### Skip QA (faster)
 
-[7/7] Running automated QA with Playwright + Claude Vision...
-      Checking home/desktop... ✓ 96%
-      Checking home/tablet... ✓ 92%
-      Checking home/mobile... ⚠ 78%
-      Checking about/desktop... ✓ 98%
-      Checking services/desktop... ✓ 94%
+```bash
+node pipeline.js --figma-url="..." --skip-qa
+node pipeline.js --from-stage=6 --skip-qa
+```
 
-────────────────────────────────────────────────────────────
-  ✅  Pipeline Complete — 214s total
-────────────────────────────────────────────────────────────
+---
 
-  QA Results:
-  ✓  home / desktop   96%
-  ✓  home / tablet    92%
-  ⚠  home / mobile    78%  hero padding slightly off
-  ✓  about / desktop  98%
-  ✓  services/desktop 94%
+## Troubleshooting
 
-  Output files: ./output/
-  QA report  : ./output/qa-report.json
-  Screenshots: ./output/screenshots/
+### ❌ Rate limit error (429) — "would exceed your organization's rate limit"
+
+**Cause:** Your Anthropic plan has a low tokens-per-minute limit (free/starter = 4,000 output tokens/min).
+
+**Fix:**
+```bash
+# Wait 60 seconds, then resume with a longer delay between calls:
+RATE_LIMIT_MS=20000 node pipeline.js --from-stage=5
+```
+
+The pipeline will **auto-retry up to 5 times** and wait for the rate limit to reset — you'll see:
+```
+⏳  Rate limit hit [gen_template:home] — waiting 60s before retry (attempt 1/5)...
+```
+
+To make the delay permanent, add to your `.env`:
+```env
+RATE_LIMIT_MS=20000
+```
+
+To avoid rate limits entirely, **add billing credits** at [console.anthropic.com](https://console.anthropic.com) — paid accounts have much higher limits (up to 2M tokens/min on higher tiers).
+
+---
+
+### ❌ "No top-level frames found"
+
+**Cause:** Your Figma design uses Groups instead of Frames at the top level.
+
+**Fix:** In Figma, select your content → press `F` to wrap it in a Frame. The pipeline reads top-level Frame nodes on each Figma page.
+
+---
+
+### ❌ Figma API 403 — "Forbidden"
+
+**Cause:** Your FIGMA_TOKEN is invalid, expired, or doesn't have access to this file.
+
+**Fix:**
+1. Generate a new token: figma.com → Settings → Security → Personal Access Tokens
+2. Update `FIGMA_TOKEN` in `.env`
+3. Resume: `node pipeline.js --from-stage=1 --figma-url="..."`
+
+---
+
+### ❌ WordPress 401 — "Authentication failed"
+
+**Cause:** Wrong WP_USER or WP_APP_PASSWORD.
+
+**Fix:**
+1. Double-check `WP_USER` is your exact WordPress username (not email)
+2. Re-generate Application Password: WP Admin → Users → Profile → Application Passwords
+3. Paste the new password into `.env`
+4. Resume: `node pipeline.js --from-stage=6`
+
+> Application Passwords may be blocked by some hosting providers (e.g., some WP Engine configs). Contact your host if this persists.
+
+---
+
+### ❌ WordPress 404 — "REST API not found"
+
+**Cause:** Permalinks are not set up, or WP_URL is wrong.
+
+**Fix:**
+1. WP Admin → Settings → Permalinks → click **Save Changes** (even without changing anything — this regenerates `.htaccess`)
+2. Make sure `WP_URL` has no trailing slash: `https://yoursite.com` ✓ not `https://yoursite.com/` ✗
+3. Resume: `node pipeline.js --from-stage=6`
+
+---
+
+### ❌ "elementor_data meta field not writable" / Bridge plugin not found
+
+**Cause:** The `figma-pipeline-bridge` companion plugin is not installed on WordPress.
+
+**Fix:** Install the plugin (see Setup Step 3). Without it, WordPress blocks writes to private meta fields starting with `_`.
+
+---
+
+### ❌ Template JSON invalid / truncated at Stage 5
+
+**Cause:** Claude's response was cut off before completing the JSON (very large landing pages).
+
+**What happens automatically:** The pipeline retries with a simplified prompt (3 attempts), then falls back to a minimal skeleton page you can edit in Elementor.
+
+**If it keeps failing:**
+```bash
+# Use a faster model with higher output limits
+CLAUDE_MODEL=claude-opus-4-6 node pipeline.js --from-stage=5
+```
+
+---
+
+### ❌ Screenshots are blank or white (Stage 7)
+
+**Cause:** The page is behind a login wall, in maintenance mode, or not yet published.
+
+**Fix:**
+1. Check the page URL from Stage 6 output — open it in a browser while logged out
+2. Disable maintenance mode if enabled
+3. Rerun QA: `node pipeline.js --only-stage=7`
+
+---
+
+### ❌ "Cannot connect to WordPress" / ECONNREFUSED
+
+**Cause:** WP_URL is wrong or the site is down.
+
+**Fix:**
+1. Visit `WP_URL/wp-json/` in your browser — you should see a JSON response
+2. If it 404s, Permalinks need saving (see above)
+3. If it times out, the site may be down or behind a firewall
+4. Resume after fixing: `node pipeline.js --from-stage=6`
+
+---
+
+### ❌ `npx playwright install chromium` fails
+
+**Fix:**
+```bash
+# Try with sudo on Mac/Linux
+sudo npx playwright install chromium
+
+# Or install system dependencies first (Linux)
+npx playwright install-deps chromium
+npx playwright install chromium
+```
+
+---
+
+### ✅ General debugging tip
+
+Set `DEBUG=true` in your `.env` to get full error stack traces:
+```bash
+DEBUG=true node pipeline.js --from-stage=5
 ```
 
 ---
@@ -221,99 +323,61 @@ After the pipeline runs, your `output/` folder contains:
 
 ```
 output/
-├── figma-raw.json              # Full Figma file data (for debugging)
+├── figma-raw.json              # Full Figma file (for debugging / resuming)
 ├── design-tokens.json          # Extracted colours, fonts, spacing
 ├── elementor-config.json       # Global Elementor settings applied to WP
-├── deployment-report.json      # List of deployed pages with URLs
+├── deployment-report.json      # Deployed page URLs
 ├── qa-report.json              # Full QA audit with scores and issues
 │
 ├── blueprints/
-│   ├── home.html               # HTML blueprint for Home page
-│   ├── about.html              # HTML blueprint for About page
-│   └── services.html           # HTML blueprint for Services page
+│   ├── home.html               # HTML blueprint — Home
+│   └── about.html              # HTML blueprint — About
 │
 ├── templates/
-│   ├── home.json               # Elementor JSON template (Home)
-│   ├── about.json              # Elementor JSON template (About)
-│   └── services.json           # Elementor JSON template (Services)
+│   ├── home.json               # Elementor JSON — Home (deployed to WP)
+│   └── about.json              # Elementor JSON — About (deployed to WP)
 │
 └── screenshots/
-    ├── home-desktop.png        # Playwright screenshot 1440px
-    ├── home-tablet.png         # Playwright screenshot 768px
-    ├── home-mobile.png         # Playwright screenshot 390px
-    └── ...
+    ├── home-desktop.png        # 1440px screenshot
+    ├── home-tablet.png         # 768px screenshot
+    └── home-mobile.png         # 390px screenshot
 ```
+
+All output files are saved after each stage. If the pipeline breaks, resume — these files are reused automatically.
 
 ---
 
 ## Understanding the QA Report
 
-Open `output/qa-report.json` or check the terminal summary:
-
-| Score | Meaning | Action |
-|-------|---------|--------|
-| 90–100% | Excellent fidelity | No changes needed |
+| Score | Meaning | What to Do |
+|-------|---------|-----------|
+| 90–100% | Excellent | No changes needed |
 | 75–89%  | Good — minor differences | Optional tweaks in Elementor |
-| 60–74%  | Acceptable — some layout drift | Review the screenshot and adjust in Elementor |
-| Below 60% | Significant issues | Check the `issues` field and fix manually |
+| 60–74%  | Layout drift | Review screenshot, adjust in Elementor |
+| Below 60% | Significant issues | Check `issues` field, fix manually in Elementor |
 
-The QA report tells you specifically what's wrong (e.g., "hero section padding doesn't match", "button colour is off") so you know exactly what to fix.
+Re-run QA after fixing: `node pipeline.js --only-stage=7`
 
 ---
 
 ## What Claude Does vs What You Still Do
 
-### Automated (zero user input)
-- Fetching and parsing the Figma file
-- Extracting the full design system (colours, fonts, spacing)
-- Generating Elementor global typography and colour kit
-- Creating HTML structure for every Figma frame
-- Converting HTML to Elementor widget JSON
-- Deploying pages to WordPress and activating them
-- Taking QA screenshots at 3 breakpoints
-- Scoring visual fidelity and flagging issues
+### Automated
+- Fetch and parse the Figma file
+- Extract the full design system (colours, fonts, spacing)
+- Generate Elementor global typography and colour kit
+- Create HTML structure for every Figma frame
+- Convert HTML → Elementor widget JSON
+- Deploy and publish pages on WordPress
+- QA screenshots at 3 breakpoints + fidelity scoring
 
 ### Still Requires Human Review
-- **Real content** — the pipeline generates placeholder text/images; you replace with actual copy and photos
-- **Low-fidelity pages** — if QA score is below 80%, open in Elementor and adjust
-- **Custom functionality** — contact forms, booking widgets, WooCommerce, ACF fields
-- **Mobile CSS fine-tuning** — complex responsive layouts may need manual adjustment
-- **SEO and metadata** — titles, descriptions, Open Graph
+- **Real content** — replace placeholder text/images with actual copy and photos
+- **Low-fidelity pages** — if QA score < 80%, open in Elementor and adjust
+- **Custom functionality** — contact forms, WooCommerce, ACF fields, booking widgets
+- **Mobile fine-tuning** — complex responsive layouts may need manual CSS
+- **SEO** — page titles, meta descriptions, Open Graph tags
 - **Client review and sign-off**
-
----
-
-## Troubleshooting
-
-### "No top-level frames found"
-- Open your Figma file and check: the designs must be inside Frame elements (not groups)
-- Press `F` in Figma to create frames, drag your content inside them
-
-### "Figma API returned 403"
-- Your FIGMA_TOKEN is invalid or expired — generate a new one
-- The file may be private — check you have View access with the token owner's account
-
-### "WordPress authentication failed (401)"
-- Check WP_USER and WP_APP_PASSWORD in `.env`
-- Make sure Application Passwords are enabled on your WordPress installation
-- Application Passwords may be disabled by your hosting provider — check with them
-
-### "WordPress REST API not found (404)"
-- Go to WP Admin → Settings → Permalinks and click Save (re-generates the `.htaccess` routing)
-- Check WP_URL has no trailing slash
-
-### "elementor_data meta field not writable"
-- Install the `figma-pipeline-bridge` WordPress plugin (see Setup Step 3)
-- This is needed because WordPress protects private meta fields by default
-
-### Claude API errors
-- Check ANTHROPIC_API_KEY is valid
-- Check your API quota at console.anthropic.com
-- If you get rate limit errors, increase RATE_LIMIT_MS in `.env` to 1500 or 2000
-
-### Screenshots are blank / white
-- The page URL may need authentication (WP in maintenance mode?)
-- Try setting `WP_DEBUG=true` in WordPress and checking error logs
 
 ---
 
@@ -322,13 +386,13 @@ The QA report tells you specifically what's wrong (e.g., "hero section padding d
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `FIGMA_TOKEN` | ✓ | — | Figma Personal Access Token |
-| `ANTHROPIC_API_KEY` | ✓ | — | Claude API key |
+| `ANTHROPIC_API_KEY` | ✓ | — | Anthropic / Claude API key |
 | `WP_URL` | ✓ | — | WordPress site URL (no trailing slash) |
 | `WP_USER` | ✓ | — | WordPress admin username |
 | `WP_APP_PASSWORD` | ✓ | — | WordPress Application Password |
-| `RATE_LIMIT_MS` | — | `500` | Delay between Claude API calls (ms) |
-| `OUTPUT_DIR` | — | `./output` | Where to write generated files |
-| `CLAUDE_MODEL` | — | `claude-opus-4-6` | Claude model to use |
+| `RATE_LIMIT_MS` | — | `500` | Delay (ms) between Claude API calls. Set to `20000` on free Anthropic plans |
+| `OUTPUT_DIR` | — | `./output` | Where generated files are saved |
+| `CLAUDE_MODEL` | — | `claude-opus-4-6` | Claude model (`claude-sonnet-4-6` is faster/cheaper) |
 | `DEBUG` | — | — | Set to `true` for full error stack traces |
 
 ---
@@ -338,53 +402,44 @@ The QA report tells you specifically what's wrong (e.g., "hero section padding d
 ```
 figma-to-wp-pipeline/
 │
-├── pipeline.js                   ← Run this
+├── pipeline.js                      ← Run this
 ├── package.json
-├── .env.example                  ← Copy to .env and fill in
+├── .env.example                     ← Copy to .env and fill in
 ├── .gitignore
 │
 ├── stages/
-│   ├── fetch_figma.js            Stage 1: Fetch Figma via REST API
-│   ├── extract_tokens.js         Stage 2: Claude extracts design tokens
-│   ├── gen_elementor_config.js   Stage 3: Claude generates global settings
-│   ├── gen_html_blueprints.js    Stage 4: Claude writes HTML per page
-│   ├── gen_elementor_templates.js  Stage 5: Claude converts HTML → Elementor JSON
-│   ├── deploy_to_wordpress.js    Stage 6: REST API deployment
-│   └── run_qa.js                 Stage 7: Playwright + Claude Vision QA
+│   ├── fetch_figma.js               Stage 1: Figma REST API
+│   ├── extract_tokens.js            Stage 2: Claude extracts design tokens
+│   ├── gen_elementor_config.js      Stage 3: Claude → Elementor global settings
+│   ├── gen_html_blueprints.js       Stage 4: Claude → HTML per page
+│   ├── gen_elementor_templates.js   Stage 5: Claude → Elementor JSON
+│   ├── deploy_to_wordpress.js       Stage 6: WP REST API deployment
+│   └── run_qa.js                    Stage 7: Playwright + Claude Vision QA
+│
+├── utils/
+│   └── claude_call.js               Rate-limit-aware Claude API wrapper (auto-retry)
 │
 ├── wordpress-plugin/
-│   └── figma-pipeline-bridge.php ← Install this on your WordPress site
+│   └── figma-pipeline-bridge.php    ← Install on your WordPress site
 │
-└── output/                       ← Auto-created when pipeline runs
-    ├── design-tokens.json
-    ├── elementor-config.json
-    ├── blueprints/
-    ├── templates/
-    ├── screenshots/
-    └── qa-report.json
+└── output/                          ← Auto-created, all generated files saved here
 ```
-
----
-
-## Updating / Re-running
-
-You can re-run the pipeline at any time. If a page already exists in WordPress, it will be updated (not duplicated).
-
-If you only want to re-deploy without re-generating (faster):
-- The templates are saved in `output/templates/*.json`
-- You can manually import them in WP Admin → Elementor → My Templates → Import
 
 ---
 
 ## Cost Estimate (Claude API)
 
-For a 3-page Figma design:
-- Stage 2: ~1,500 tokens input + 500 output = ~2,000 tokens
-- Stage 3: ~1,000 tokens input + 800 output = ~1,800 tokens
-- Stage 4: ~3 calls × ~3,000 tokens each = ~9,000 tokens
-- Stage 5: ~3 calls × ~6,000 tokens each = ~18,000 tokens
-- Stage 7 (vision): ~6 calls × ~1,000 tokens each = ~6,000 tokens
+For a 3-page Figma design with `claude-opus-4-6`:
 
-**Total: ~37,000 tokens ≈ $0.37–$1.10 USD** depending on model pricing.
+| Stage | Calls | Approx Tokens | Cost |
+|-------|-------|--------------|------|
+| 2 — Extract tokens | 1 | ~2,000 | ~$0.03 |
+| 3 — Elementor config | 1 | ~1,800 | ~$0.02 |
+| 4 — HTML blueprints | 3 | ~12,000 | ~$0.18 |
+| 5 — Elementor templates | 3 | ~24,000 | ~$0.36 |
+| 7 — QA vision | 6 | ~6,000 | ~$0.09 |
+| **Total** | **14** | **~46,000** | **~$0.68** |
+
+Switch to `claude-sonnet-4-6` (set `CLAUDE_MODEL=claude-sonnet-4-6` in `.env`) for ~3× lower cost with slightly less output quality.
 
 Check current pricing at [anthropic.com/pricing](https://anthropic.com/pricing).
