@@ -56,7 +56,7 @@ You paste a Figma file URL. Claude AI reads the design, extracts tokens, generat
 ### Step 1: Clone and Install
 
 ```bash
-git clone https://github.com/your-org/figma-to-wp-pipeline
+git clone https://github.com/huebnermarketing/figma-to-wp-pipeline.git
 cd figma-to-wp-pipeline
 npm install
 npx playwright install chromium
